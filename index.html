@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail POS System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            #modal-receipt,
+            #modal-receipt * {
+                visibility: visible;
+            }
+
+            #modal-receipt {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                border: 0;
+                box-shadow: none;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 h-screen overflow-hidden flex font-sans">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col z-20 shadow-sm no-print">
+        <div
+            class="h-16 flex items-center px-6 border-b border-slate-100 font-extrabold text-2xl text-blue-600 tracking-tight">
+            Sarasi POS</div>
+        <nav class="p-4 space-y-2 flex-1">
+            <button id="nav-pos" onclick="switchTab('pos')"
+                class="w-full text-left px-4 py-3 rounded-lg font-bold transition-all bg-blue-600 text-white shadow-md">🛍️
+                Point of Sale</button>
+            <button id="nav-inventory" onclick="switchTab('inventory')"
+                class="w-full text-left px-4 py-3 rounded-lg font-bold transition-all text-slate-600 hover:bg-slate-100">📦
+                Inventory</button>
+            <button id="nav-dashboard" onclick="switchTab('dashboard')"
+                class="w-full text-left px-4 py-3 rounded-lg font-bold transition-all text-slate-600 hover:bg-slate-100">📊
+                Dashboard</button>
+            <button id="nav-returns" onclick="switchTab('returns')"
+                class="w-full text-left px-4 py-3 rounded-lg font-bold transition-all text-slate-600 hover:bg-slate-100">↩️
+                Returns</button>
+        </nav>
+    </aside>
+
+    <main class="flex-1 overflow-hidden relative">
+
+        <!-- POS VIEW -->
+        <div id="view-pos" class="h-full flex divide-x divide-slate-200">
+            <!-- Products Panel -->
+            <div class="flex-1 flex flex-col h-full bg-slate-50">
+                <div
+                    class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-sm z-10">
+                    <input type="text" id="search-pos" onkeyup="renderPOS()" placeholder="Search Name or SKU..."
+                        class="bg-slate-100 border-none px-4 py-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <select id="filter-cat" onchange="renderPOS()"
+                        class="bg-slate-100 border-none px-4 py-2 rounded-lg outline-none cursor-pointer focus:ring-2 focus:ring-blue-500">
+                        <option value="All">All Categories</option>
+                        <option value="Dairy">Dairy</option>
+                        <option value="Poultry">Poultry</option>
+                        <option value="Frozen">Frozen</option>
+                        <option value="Stationery">Stationery</option>
+                    </select>
+                </div>
+                <div class="p-6 flex-1 overflow-y-auto">
+                    <div id="pos-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20"></div>
+                </div>
+            </div>
+
+            <!-- Cart Sidebar -->
+            <div class="w-96 flex flex-col bg-white h-full z-10">
+                <div class="h-16 border-b border-slate-100 px-6 flex items-center justify-between bg-slate-50">
+                    <h2 class="font-bold text-lg">Current Bill</h2>
+                    <button onclick="clearCart()"
+                        class="text-sm font-semibold text-red-500 hover:text-red-700">Clear</button>
+                </div>
+                <div id="cart-list" class="flex-1 overflow-y-auto p-4 space-y-1 bg-white"></div>
+
+                <div class="border-t border-slate-200 bg-slate-50 p-6 space-y-4">
+                    <div class="flex gap-2">
+                        <input type="number" id="discount-val" oninput="updateCart()" placeholder="Discount"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500">
+                        <select id="discount-type" onchange="updateCart()"
+                            class="px-3 py-2 border border-slate-300 rounded-lg outline-none bg-white">
+                            <option value="flat">Rs</option>
+                            <option value="percent">%</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1 text-sm font-semibold text-slate-500">
+                        <div class="flex justify-between"><span>Subtotal:</span><span id="c-subtotal">Rs 0.00</span>
+                        </div>
+                        <div class="flex justify-between text-red-500"><span>Discount:</span><span id="c-discount">- Rs
+                                0.00</span></div>
+                        <div
+                            class="flex justify-between text-xl text-slate-800 mt-2 font-bold py-2 border-t border-slate-200">
+                            <span>Total:</span><span id="c-total" class="text-blue-600">Rs 0.00</span>
+                        </div>
+                    </div>
+                    <button id="btn-checkout" onclick="openCheckout()"
+                        class="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">Charge</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- INVENTORY VIEW -->
+        <div id="view-inventory" class="h-full hidden flex-col bg-slate-100">
+            <div class="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">Inventory</h2>
+                </div>
+                <button onclick="openAddProduct()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md">Add
+                    Product</button>
+            </div>
+            <div class="p-8 flex-1 overflow-hidden flex flex-col">
+                <input type="text" id="search-inv" onkeyup="renderInventory()" placeholder="Search Inventory..."
+                    class="bg-white border border-slate-300 px-4 py-3 rounded-lg shadow-sm outline-none w-full max-w-sm mb-6 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="bg-slate-50 top-0 sticky z-10 border-b border-slate-200 font-semibold text-slate-600">
+                            <tr>
+                                <th class="py-3 px-4">SKU</th>
+                                <th class="py-3 px-4">Name</th>
+                                <th class="py-3 px-4">Category</th>
+                                <th class="py-3 px-4">Cost (Rs)</th>
+                                <th class="py-3 px-4">Price (Rs)</th>
+                                <th class="py-3 px-4">Stock</th>
+                                <th class="py-3 px-4">Expiry</th>
+                                <th class="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inv-table" class="divide-y divide-slate-100 text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- DASHBOARD VIEW -->
+        <div id="view-dashboard" class="h-full hidden flex-col bg-slate-50 overflow-auto">
+            <div class="h-20 bg-white border-b border-slate-200 px-8 flex items-center">
+                <h2 class="text-2xl font-bold text-slate-800">Today Analytics</h2>
+            </div>
+            <div class="p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- KPI -->
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p class="text-slate-500 font-semibold mb-1">Today's Revenue</p>
+                    <h3 id="dash-rev" class="text-3xl font-extrabold text-blue-600">Rs 0.00</h3>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p class="text-slate-500 font-semibold mb-1">Net Profit</p>
+                    <h3 id="dash-prof" class="text-3xl font-extrabold text-emerald-500">Rs 0.00</h3>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p class="text-slate-500 font-semibold mb-1">Sales Count</p>
+                    <h3 id="dash-count" class="text-3xl font-extrabold text-slate-800">0</h3>
+                </div>
+
+                <div class="col-span-1 md:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <h3 class="font-bold text-slate-800 mb-4 border-b pb-2">Recent Transactions</h3>
+                    <div id="dash-latest-sales" class="space-y-1"></div>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-hidden flex flex-col">
+                    <h3 class="font-bold text-amber-600 mb-4 border-b pb-2 flex items-center gap-2">⚠️ Low Stock Alerts
+                    </h3>
+                    <div id="dash-low-stock" class="overflow-auto flex-1"></div>
+                </div>
+
+                <div
+                    class="col-span-1 md:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-hidden flex flex-col">
+                    <h3 class="font-bold text-red-600 mb-4 border-b pb-2 flex items-center gap-2">🚨 Expiry Alerts
+                        (Nearing or Expired)
+                    </h3>
+                    <div id="dash-expire-stock"
+                        class="overflow-auto flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RETURNS VIEW -->
+        <div id="view-returns" class="h-full hidden flex-col bg-slate-100 overflow-auto">
+            <div class="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">Process Returns</h2>
+                </div>
+            </div>
+            <div class="p-8 flex-1 flex flex-col items-start gap-6 relative">
+                <!-- Search by Bill -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full max-w-xl">
+                    <label class="block text-sm font-bold text-slate-600 mb-2">Search by Bill No (Sale ID)</label>
+                    <div class="flex gap-2">
+                        <input type="number" id="return-sale-id" placeholder="e.g. 1"
+                            class="border border-slate-300 px-4 py-2 rounded-lg outline-none flex-1 focus:border-blue-500 font-bold text-lg">
+                        <button onclick="searchSaleForReturn()"
+                            class="bg-slate-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-900">Search</button>
+                    </div>
+                </div>
+
+                <!-- Return Items Table -->
+                <div id="return-details-container"
+                    class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 w-full hidden flex-col mb-10">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-slate-800">Receipt Details: #<span id="rt-bill-no"
+                                class="font-mono text-blue-600"></span></h3>
+                        <span id="rt-date" class="text-slate-500 text-sm font-semibold"></span>
+                    </div>
+                    <div class="border border-slate-200 rounded-lg overflow-x-auto mb-4">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-slate-50 border-b border-slate-200 font-semibold text-slate-600">
+                                <tr>
+                                    <th class="py-3 px-4">Item Name</th>
+                                    <th class="py-3 px-4 text-right">Unit Price</th>
+                                    <th class="py-3 px-4 text-center border-l bg-slate-100">Purchased</th>
+                                    <th class="py-3 px-4 text-center border-r bg-slate-100">Previously Returned</th>
+                                    <th class="py-3 px-4 w-40">Return Qty Today</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rt-items" class="divide-y divide-slate-100 text-slate-700"></tbody>
+                        </table>
+                    </div>
+                    <div class="flex justify-between items-end mt-2 pt-4 border-t border-slate-100">
+                        <div class="text-sm font-semibold text-slate-500 max-w-md">
+                            Estimated Refund amount based on returned items: <br>
+                            <span class="text-xs text-amber-600 font-normal leading-tight block mt-1">*Note: Discounts
+                                applied to the original bill are not automatically prorated here. Refund represents
+                                strictly returned item price × amount returned.</span>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-slate-500 font-bold mb-1">Total Refund Amount</p>
+                            <p id="rt-refund-total" class="text-4xl font-extrabold text-blue-600">Rs 0.00</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-8 gap-3">
+                        <button onclick="cancelReturn()"
+                            class="px-6 py-3 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50 transition-colors">Cancel
+                            Session</button>
+                        <button id="btn-process-return" onclick="processReturn()"
+                            class="px-8 py-3 rounded-xl bg-red-600 text-white font-bold text-lg hover:bg-red-700 shadow-md disabled:opacity-50 transition-colors"
+                            disabled>Process Refund</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+
+    <!-- Checkout Modal -->
+    <div id="modal-checkout"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <div class="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-xl">Payment</h3>
+                <button onclick="hideCheckout()" class="text-slate-400 hover:text-slate-600 font-bold">X</button>
+            </div>
+            <div class="p-6 space-y-5">
+                <div class="text-center pb-4 border-b border-slate-100">
+                    <p class="text-slate-500 font-semibold mb-1">Total to Pay</p>
+                    <h2 id="co-total" class="text-4xl font-extrabold text-blue-600">Rs 0.00</h2>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-600 mb-2">Payment Method</label>
+                    <select id="pay-method" onchange="checkBalance()"
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-blue-500 font-semibold text-slate-700">
+                        <option value="Cash">Cash</option>
+                        <option value="Card">Card</option>
+                        <option value="QR">QR Pay</option>
+                    </select>
+                </div>
+                <div id="co-cash-wrapper">
+                    <label class="block text-sm font-semibold text-slate-600 mb-2">Cash Received (Rs)</label>
+                    <input type="number" id="co-cash" oninput="checkBalance()" placeholder="0.00"
+                        class="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:border-blue-500 text-lg font-bold">
+                    <div
+                        class="mt-4 flex justify-between items-center py-3 px-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <span class="font-bold text-slate-500">Balance</span>
+                        <span id="co-balance" class="text-2xl font-bold text-red-500">Rs 0.00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 grid grid-cols-2 gap-3 bg-slate-50 border-t border-slate-100">
+                <button onclick="hideCheckout()"
+                    class="py-3 px-4 rounded-xl font-bold border border-slate-300 hover:bg-slate-100 text-slate-600">Cancel</button>
+                <button id="btn-confirm-sale" onclick="finalizeSale()"
+                    class="py-3 px-4 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-md disabled:opacity-50"
+                    disabled>Confirm Sale</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Form Modal -->
+    <div id="modal-product"
+        class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden items-center justify-center">
+        <form id="form-product" onsubmit="saveProduct(event)"
+            class="bg-white max-w-lg w-full rounded-2xl shadow-2xl overflow-hidden p-6 relative">
+            <h3 class="font-bold text-xl mb-6">Product Details</h3>
+            <button type="button" onclick="hideProductModal()"
+                class="absolute top-6 right-6 text-slate-400 font-bold hover:text-slate-600">X</button>
+
+            <input type="hidden" id="p-id">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="text-xs font-bold text-slate-500">SKU</label><input type="text" id="p-sku" required
+                        class="w-full border p-2 rounded outline-none uppercase font-mono"></div>
+                <div><label class="text-xs font-bold text-slate-500">Unit Name (e.g. Pcs, Kg)</label><input type="text"
+                        id="p-unit" required class="w-full border p-2 rounded outline-none"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div><label class="text-xs font-bold text-slate-500">Brand (Optional)</label><input type="text"
+                        id="p-brand" class="w-full border p-2 rounded outline-none" placeholder="e.g. Highland"></div>
+                <div><label class="text-xs font-bold text-slate-500">Product Name</label><input type="text" id="p-name"
+                        required class="w-full border p-2 rounded outline-none"></div>
+            </div>
+            <div class="mb-4">
+                <label class="text-xs font-bold text-slate-500">Category</label>
+                <select id="p-category" class="w-full border p-2 rounded outline-none font-semibold">
+                    <option>Dairy</option>
+                    <option>Poultry</option>
+                    <option>Frozen</option>
+                    <option>Stationery</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div><label class="text-xs font-bold text-slate-500">Cost Price</label><input type="number" step="0.01"
+                        min="0" id="p-cost" required class="w-full border p-2 rounded outline-none font-mono"></div>
+                <div><label class="text-xs font-bold text-slate-500">Selling Price</label><input type="number"
+                        step="0.01" min="0" id="p-sell" required
+                        class="w-full border p-2 rounded outline-none font-mono"></div>
+                <div><label class="text-xs font-bold text-slate-500">Initial Stock</label><input type="number"
+                        id="p-stock" required class="w-full border p-2 rounded outline-none font-mono"></div>
+            </div>
+            <div class="mb-6">
+                <label class="text-xs font-bold text-red-500">Expiry Date (Required)</label>
+                <input type="date" id="p-expiry" required
+                    class="w-full border border-red-200 p-2 rounded outline-none font-mono focus:border-red-500 focus:ring-1 focus:ring-red-500">
+            </div>
+            <div class="flex gap-3">
+                <button type="button" onclick="hideProductModal()"
+                    class="flex-1 py-2 rounded bg-slate-100 font-bold text-slate-600 border">Cancel</button>
+                <button type="submit"
+                    class="flex-1 py-2 rounded bg-blue-600 font-bold text-white shadow-md">Save</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Receipt Thermal Modal -->
+    <div id="modal-receipt" class="fixed inset-0 bg-white z-[100] hidden flex-col items-center py-10 overflow-auto">
+        <div
+            class="w-80 border-2 border-slate-300 border-dashed p-6 bg-white shadow-lg text-sm text-slate-800 no-print-shadow select-none">
+            <div class="text-center mb-6">
+                <h1 class="font-black text-xl tracking-widest uppercase">SARASI</h1>
+                <p class="text-xs font-mono text-slate-500 mt-1">Bookshop and Dairy</p>
+                <div class="text-xs font-mono text-left mt-4 border-t border-slate-200 border-dashed pt-2 space-y-0.5">
+                    <p>Bill No: <span class="font-bold" id="r-id"></span></p>
+                    <p>Date: <span id="r-date"></span></p>
+                </div>
+            </div>
+            <table class="w-full text-xs font-mono mb-4 text-left border-y border-dashed border-slate-300 py-2">
+                <thead class="border-b border-dashed border-slate-200">
+                    <tr>
+                        <th class="py-1">Q</th>
+                        <th>Item</th>
+                        <th class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="r-items" class="align-top"></tbody>
+            </table>
+            <div class="text-xs font-mono space-y-1 mb-6">
+                <div class="flex justify-between"><span>Subtotal:</span><span id="r-sub"></span></div>
+                <div class="flex justify-between"><span>Discount:</span><span id="r-dis"></span></div>
+                <div class="flex justify-between font-bold text-sm border-t border-dashed border-slate-300 pt-1 mt-1">
+                    <span>NET TOTAL:</span><span id="r-tot"></span>
+                </div>
+                <div class="flex justify-between text-slate-500 pt-2"><span>Pay Method:</span><span
+                        id="r-method"></span></div>
+                <div class="flex justify-between" id="r-cash-wrapper"><span>Cash:</span><span id="r-cash"></span></div>
+                <div class="flex justify-between" id="r-bal-wrapper"><span>Balance:</span><span id="r-bal"></span></div>
+            </div>
+            <div class="text-center text-[10px] font-mono text-slate-500 border-t border-dashed border-slate-300 pt-4">
+                <p>Thank You! Please Come Again.</p>
+                <p>System by Antigravity</p>
+            </div>
+        </div>
+        <div class="mt-6 flex gap-4 no-print">
+            <button onclick="window.print()"
+                class="px-6 py-2.5 bg-slate-800 text-white rounded-lg shadow-md font-bold hover:bg-slate-900">🖨️ Print
+                Receipt</button>
+            <button onclick="hideReceipt()"
+                class="px-6 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg shadow font-bold hover:bg-slate-50">New
+                Sale</button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"
+        class="fixed bottom-5 right-5 px-4 py-2 rounded shadow-lg text-white font-bold transition-all z-50 transform translate-y-20 opacity-0 pointer-events-none">
+    </div>
+
+    <script src="db.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
