@@ -1,9 +1,46 @@
 // State
 let cart = [];
 let currentTab = 'pos';
+let isAuthenticated = false;
+
+// Auth Logic
+function checkAuth() {
+    if (localStorage.getItem('pos_auth') === 'true') {
+        isAuthenticated = true;
+        document.getElementById('view-login').classList.add('hidden');
+        document.getElementById('view-login').classList.remove('flex');
+    } else {
+        document.getElementById('view-login').classList.remove('hidden');
+        document.getElementById('view-login').classList.add('flex');
+
+        // Ensure input is focused when shown
+        setTimeout(() => document.getElementById('login-pin').focus(), 100);
+    }
+}
+
+function handleLogin(e) {
+    if (e) e.preventDefault();
+    const pin = document.getElementById('login-pin').value;
+    if (pin === 'sarasi1234') {
+        localStorage.setItem('pos_auth', 'true');
+        checkAuth();
+        showToast('Login successful', 'success');
+        document.getElementById('login-pin').value = '';
+    } else {
+        showToast('Invalid PIN (Hint: 1234)', 'error');
+    }
+}
+
+function handleLogout() {
+    localStorage.removeItem('pos_auth');
+    isAuthenticated = false;
+    checkAuth();
+    showToast('Logged out successfully', 'success');
+}
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
     switchTab('pos');
     renderPOS();
     renderInventory();
@@ -16,7 +53,7 @@ function switchTab(tabId) {
     ['pos', 'inventory', 'dashboard', 'returns'].forEach(id => {
         const el = document.getElementById(`view-${id}`);
         const nav = document.getElementById(`nav-${id}`);
-        if(id === tabId) {
+        if (id === tabId) {
             el.classList.remove('hidden');
             el.classList.add('flex');
             nav.classList.add('bg-blue-600', 'text-white', 'shadow-md');
@@ -29,9 +66,9 @@ function switchTab(tabId) {
         }
     });
 
-    if(tabId === 'dashboard') renderDashboard();
-    if(tabId === 'inventory') renderInventory();
-    if(tabId === 'pos') renderPOS();
+    if (tabId === 'dashboard') renderDashboard();
+    if (tabId === 'inventory') renderInventory();
+    if (tabId === 'pos') renderPOS();
 }
 
 // ======================
@@ -40,14 +77,14 @@ function switchTab(tabId) {
 async function renderPOS() {
     const search = document.getElementById('search-pos').value.toLowerCase();
     const category = document.getElementById('filter-cat').value;
-    
+
     let products = await db.products.toArray();
-    
-    if(category !== 'All') {
+
+    if (category !== 'All') {
         products = products.filter(p => p.category === category);
     }
-    
-    if(search.trim() !== '') {
+
+    if (search.trim() !== '') {
         products = products.filter(p => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search));
     }
 
@@ -69,22 +106,22 @@ async function renderPOS() {
         `;
     }).join('');
 
-    if(products.length === 0) {
+    if (products.length === 0) {
         grid.innerHTML = '<div class="col-span-full text-center py-10 text-slate-400">No items found</div>';
     }
 }
 
 async function addToCart(id) {
     const p = await db.products.get(id);
-    if(!p) return;
+    if (!p) return;
 
     const existing = cart.find(i => i.id === id);
-    if(existing) {
-        if(existing.qty < p.stock) existing.qty++;
+    if (existing) {
+        if (existing.qty < p.stock) existing.qty++;
         else showToast('Cannot exceed available stock', 'error');
     } else {
-        if(p.stock > 0) {
-            cart.push({...p, qty: 1});
+        if (p.stock > 0) {
+            cart.push({ ...p, qty: 1 });
         } else {
             showToast('Out of stock', 'error');
         }
@@ -94,9 +131,9 @@ async function addToCart(id) {
 
 function updateCartQty(id, delta) {
     const item = cart.find(i => i.id === id);
-    if(item) {
+    if (item) {
         const newQty = item.qty + delta;
-        if(newQty > 0 && newQty <= item.stock) {
+        if (newQty > 0 && newQty <= item.stock) {
             item.qty = newQty;
         } else if (newQty === 0) {
             cart = cart.filter(i => i.id !== id);
@@ -111,7 +148,7 @@ function removeCartItem(id) {
 }
 
 function clearCart() {
-    if(cart.length > 0 && confirm('Clear cart?')) {
+    if (cart.length > 0 && confirm('Clear cart?')) {
         cart = [];
         updateCart();
     }
@@ -120,8 +157,8 @@ function clearCart() {
 function updateCart() {
     const list = document.getElementById('cart-list');
     let subtotal = 0;
-    
-    if(cart.length === 0) {
+
+    if (cart.length === 0) {
         list.innerHTML = '<div class="text-center py-10 text-slate-400">Cart is empty</div>';
     } else {
         list.innerHTML = cart.map(i => {
@@ -149,39 +186,39 @@ function updateCart() {
     // Discounts
     let discountVal = parseFloat(document.getElementById('discount-val').value) || 0;
     const discountType = document.getElementById('discount-type').value;
-    
+
     let discountAmt = 0;
-    if(discountType === 'percent') {
+    if (discountType === 'percent') {
         discountAmt = subtotal * (discountVal / 100);
     } else {
         discountAmt = discountVal;
     }
 
     const finalTotal = subtotal - discountAmt;
-    
+
     document.getElementById('c-subtotal').innerText = `Rs ${subtotal.toFixed(2)}`;
     document.getElementById('c-discount').innerText = `- Rs ${discountAmt.toFixed(2)}`;
     document.getElementById('c-total').innerText = `Rs ${finalTotal.toFixed(2)}`;
-    
+
     document.getElementById('btn-checkout').disabled = cart.length === 0 || finalTotal < 0;
 }
 
 function openCheckout() {
-    if(cart.length === 0) return;
+    if (cart.length === 0) return;
     document.getElementById('modal-checkout').classList.remove('hidden');
     document.getElementById('modal-checkout').classList.add('flex');
-    
+
     const subtotal = cart.reduce((acc, i) => acc + (i.sellingPrice * i.qty), 0);
     let discountVal = parseFloat(document.getElementById('discount-val').value) || 0;
     const discountType = document.getElementById('discount-type').value;
-    let discountAmt = discountType === 'percent' ? subtotal * (discountVal/100) : discountVal;
+    let discountAmt = discountType === 'percent' ? subtotal * (discountVal / 100) : discountVal;
     const total = subtotal - discountAmt;
 
     document.getElementById('co-total').innerText = `Rs ${total.toFixed(2)}`;
     document.getElementById('co-cash').value = '';
     document.getElementById('co-balance').innerText = 'Rs 0.00';
     document.getElementById('btn-confirm-sale').disabled = true;
-    
+
     // Default to Cash
     document.getElementById('pay-method').value = 'Cash';
     checkBalance();
@@ -196,7 +233,7 @@ function checkBalance() {
     const subtotal = cart.reduce((acc, i) => acc + (i.sellingPrice * i.qty), 0);
     let discountVal = parseFloat(document.getElementById('discount-val').value) || 0;
     const discountType = document.getElementById('discount-type').value;
-    let discountAmt = discountType === 'percent' ? subtotal * (discountVal/100) : discountVal;
+    let discountAmt = discountType === 'percent' ? subtotal * (discountVal / 100) : discountVal;
     const total = subtotal - discountAmt;
 
     const method = document.getElementById('pay-method').value;
@@ -206,11 +243,11 @@ function checkBalance() {
     let balEl = document.getElementById('co-balance');
     let btn = document.getElementById('btn-confirm-sale');
 
-    if(method === 'Cash') {
+    if (method === 'Cash') {
         cashInput.classList.remove('hidden');
         const balance = cash - total;
         balEl.innerText = `Rs ${balance.toFixed(2)}`;
-        if(balance >= 0) {
+        if (balance >= 0) {
             balEl.className = 'text-2xl font-bold text-emerald-600';
             btn.disabled = false;
         } else {
@@ -230,21 +267,21 @@ async function finalizeSale() {
     try {
         const subtotal = cart.reduce((acc, i) => acc + (i.sellingPrice * i.qty), 0);
         const totalProfit = cart.reduce((acc, i) => acc + ((i.sellingPrice - i.costPrice) * i.qty), 0);
-        
+
         let discountVal = parseFloat(document.getElementById('discount-val').value) || 0;
         const discountType = document.getElementById('discount-type').value;
-        const discountAmt = discountType === 'percent' ? subtotal * (discountVal/100) : discountVal;
-        
+        const discountAmt = discountType === 'percent' ? subtotal * (discountVal / 100) : discountVal;
+
         const finalTotal = subtotal - discountAmt;
         const method = document.getElementById('pay-method').value;
-        
+
         // Final profit adjusting for discount
         const netProfit = totalProfit - discountAmt;
 
         const ts = new Date().getTime();
         const saleId = await db.sales.add({
             timestamp: ts,
-            items: cart.map(i => ({id: i.id, name: i.name, qty: i.qty, price: i.sellingPrice})),
+            items: cart.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.sellingPrice })),
             subtotal,
             discount: discountAmt,
             totalAmount: finalTotal,
@@ -252,7 +289,7 @@ async function finalizeSale() {
             paymentMethod: method
         });
 
-        for(const item of cart) {
+        for (const item of cart) {
             const p = await db.products.get(item.id);
             await db.products.update(item.id, { stock: p.stock - item.qty });
         }
@@ -261,14 +298,14 @@ async function finalizeSale() {
         const balance = document.getElementById('co-balance').innerText;
 
         printReceipt(saleId, ts, finalTotal, discountAmt, method, cash, balance);
-        
+
         cart = [];
         document.getElementById('discount-val').value = '';
         hideCheckout();
         updateCart();
         renderPOS();
         showToast('Sale Complete!', 'success');
-    } catch(err) {
+    } catch (err) {
         console.error(err);
         showToast('Error saving sale', 'error');
         document.getElementById('btn-confirm-sale').disabled = false;
@@ -279,17 +316,17 @@ async function finalizeSale() {
 function printReceipt(id, time, total, discount, method, cash, balance) {
     document.getElementById('r-id').innerText = id.toString().padStart(6, '0');
     document.getElementById('r-date').innerText = new Date(time).toLocaleString();
-    
-    document.getElementById('r-items').innerHTML = cart.map(i => 
+
+    document.getElementById('r-items').innerHTML = cart.map(i =>
         `<tr><td class="pr-2">${i.qty}</td><td>${i.name}</td><td class="text-right">${(i.qty * i.sellingPrice).toFixed(2)}</td></tr>`
     ).join('');
 
-    document.getElementById('r-sub').innerText = parseFloat(total+discount).toFixed(2);
+    document.getElementById('r-sub').innerText = parseFloat(total + discount).toFixed(2);
     document.getElementById('r-dis').innerText = parseFloat(discount).toFixed(2);
     document.getElementById('r-tot').innerText = parseFloat(total).toFixed(2);
     document.getElementById('r-method').innerText = method;
 
-    if(method === 'Cash') {
+    if (method === 'Cash') {
         document.getElementById('r-cash').innerText = parseFloat(cash).toFixed(2);
         document.getElementById('r-bal').innerText = balance.replace('Rs ', '');
         document.getElementById('r-cash-wrapper').style.display = 'flex';
@@ -315,7 +352,7 @@ async function renderInventory() {
     const search = document.getElementById('search-inv').value.toLowerCase();
     let products = await db.products.toArray();
 
-    if(search) {
+    if (search) {
         products = products.filter(p => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search) || p.category.toLowerCase().includes(search));
     }
 
@@ -353,7 +390,7 @@ function hideProductModal() {
 
 async function editProduct(id) {
     const p = await db.products.get(id);
-    if(!p) return;
+    if (!p) return;
     document.getElementById('p-id').value = p.id;
     document.getElementById('p-sku').value = p.sku;
     document.getElementById('p-brand').value = p.brand || '';
@@ -364,7 +401,7 @@ async function editProduct(id) {
     document.getElementById('p-sell').value = p.sellingPrice;
     document.getElementById('p-stock').value = p.stock;
     document.getElementById('p-expiry').value = p.expiryDate || '';
-    
+
     document.getElementById('modal-product').classList.remove('hidden');
     document.getElementById('modal-product').classList.add('flex');
 }
@@ -384,7 +421,7 @@ async function saveProduct(e) {
         expiryDate: document.getElementById('p-expiry').value
     };
 
-    if(id) {
+    if (id) {
         await db.products.update(parseInt(id), p);
         showToast('Updated successfully');
     } else {
@@ -393,11 +430,11 @@ async function saveProduct(e) {
     }
     hideProductModal();
     renderInventory();
-    renderPOS(); 
+    renderPOS();
 }
 
 async function deleteProduct(id) {
-    if(confirm('Delete product forever?')) {
+    if (confirm('Delete product forever?')) {
         await db.products.delete(id);
         renderInventory();
         renderPOS();
@@ -410,17 +447,17 @@ async function deleteProduct(id) {
 // ======================
 async function renderDashboard() {
     const sales = await db.sales.toArray();
-    const today = new Date().setHours(0,0,0,0);
+    const today = new Date().setHours(0, 0, 0, 0);
     const todaySales = sales.filter(s => s.timestamp >= today);
 
     const rev = todaySales.reduce((acc, s) => acc + s.totalAmount, 0);
     const prof = todaySales.reduce((acc, s) => acc + s.profit, 0);
 
     // Calculate Today's Refunds to deduct from Revenue/Profit
-    const todayMillis = new Date().setHours(0,0,0,0);
+    const todayMillis = new Date().setHours(0, 0, 0, 0);
     const allReturns = await db.returns.toArray();
     const todayReturns = allReturns.filter(r => r.timestamp >= todayMillis);
-    
+
     const refundedRev = todayReturns.reduce((acc, r) => acc + r.refundAmount, 0);
     const refundedProf = todayReturns.reduce((acc, r) => acc + r.refundProfit, 0);
 
@@ -449,7 +486,7 @@ async function renderDashboard() {
     const products = await db.products.toArray();
     const low = products.filter(p => p.stock < 5);
     const list = document.getElementById('dash-low-stock');
-    if(low.length === 0) {
+    if (low.length === 0) {
         list.innerHTML = '<p class="text-sm text-emerald-600 bg-emerald-50 p-2 rounded">All stock levels are healthy.</p>';
     } else {
         list.innerHTML = low.map(p => `
@@ -463,13 +500,13 @@ async function renderDashboard() {
     // Latest Transactions (Sales & Returns)
     const latestSalesList = document.getElementById('dash-latest-sales');
     const combinedTransactions = [
-        ...sales.map(s => ({...s, type: 'Sale'})),
-        ...allReturns.map(r => ({...r, type: 'Return'}))
+        ...sales.map(s => ({ ...s, type: 'Sale' })),
+        ...allReturns.map(r => ({ ...r, type: 'Return' }))
     ];
     combinedTransactions.sort((a, b) => a.timestamp - b.timestamp);
-    
+
     const recent = combinedTransactions.slice(-5).reverse();
-    if(recent.length === 0) {
+    if (recent.length === 0) {
         latestSalesList.innerHTML = '<p class="text-sm text-slate-500 text-center py-4">No recent transactions</p>';
     } else {
         latestSalesList.innerHTML = recent.map(t => {
@@ -477,7 +514,7 @@ async function renderDashboard() {
                 return `
                 <div class="flex justify-between items-center p-3 border-b border-slate-100 bg-white">
                     <div>
-                        <p class="font-bold text-sm">Sale #${t.id.toString().padStart(6,'0')}</p>
+                        <p class="font-bold text-sm">Sale #${t.id.toString().padStart(6, '0')}</p>
                         <p class="text-xs text-slate-500">${new Date(t.timestamp).toLocaleTimeString()}</p>
                     </div>
                     <div class="text-right">
@@ -489,7 +526,7 @@ async function renderDashboard() {
                 return `
                 <div class="flex justify-between items-center p-3 border-b border-slate-200 bg-red-50">
                     <div>
-                        <p class="font-bold text-sm text-red-600">Return (Bill #${t.saleId.toString().padStart(6,'0')})</p>
+                        <p class="font-bold text-sm text-red-600">Return (Bill #${t.saleId.toString().padStart(6, '0')})</p>
                         <p class="text-xs text-red-400">${new Date(t.timestamp).toLocaleTimeString()}</p>
                     </div>
                     <div class="text-right">
@@ -503,25 +540,25 @@ async function renderDashboard() {
 
     // Expiry Alerts
     const expireAlerts = products.filter(p => {
-        if(!p.expiryDate) return false;
+        if (!p.expiryDate) return false;
         const d = new Date(p.expiryDate).getTime();
         const days = Math.ceil((d - todayMillis) / (1000 * 3600 * 24));
         return days <= 30; // 30 days or less, including expired
     });
-    
-    expireAlerts.sort((a,b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+    expireAlerts.sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
 
     const expireList = document.getElementById('dash-expire-stock');
-    if(expireAlerts.length === 0) {
+    if (expireAlerts.length === 0) {
         expireList.innerHTML = '<div class="col-span-full"><p class="text-sm text-emerald-600 bg-emerald-50 p-3 rounded-lg font-semibold w-full">All generic products have healthy expiration timelines.</p></div>';
     } else {
         expireList.innerHTML = expireAlerts.map(p => {
             const d = new Date(p.expiryDate).getTime();
             const days = Math.ceil((d - todayMillis) / (1000 * 3600 * 24));
             let status = '';
-            if(days <= 0) status = `<span class="bg-red-100/80 text-red-700 text-xs px-2.5 py-1 rounded-md font-bold shadow-sm whitespace-nowrap">Expired (${Math.abs(days)}d ago)</span>`;
+            if (days <= 0) status = `<span class="bg-red-100/80 text-red-700 text-xs px-2.5 py-1 rounded-md font-bold shadow-sm whitespace-nowrap">Expired (${Math.abs(days)}d ago)</span>`;
             else status = `<span class="bg-amber-100/80 text-amber-700 text-xs px-2.5 py-1 rounded-md font-bold shadow-sm whitespace-nowrap">Expiring in ${days} days</span>`;
-            
+
             return `
             <div class="flex flex-col p-4 border border-slate-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow relative">
                 ${days <= 0 ? '<div class="absolute inset-0 bg-red-50/50 rounded-xl pointer-events-none border border-red-200"></div>' : ''}
@@ -553,13 +590,13 @@ let currentReturnSession = null;
 async function searchSaleForReturn() {
     const idVal = document.getElementById('return-sale-id').value;
     const id = parseInt(idVal);
-    if(!idVal || isNaN(id)) return showToast('Please enter a Bill ID', 'error');
+    if (!idVal || isNaN(id)) return showToast('Please enter a Bill ID', 'error');
 
     const sale = await db.sales.get(id);
-    if(!sale) return showToast(`No sale found with Bill #${id}`, 'error');
+    if (!sale) return showToast(`No sale found with Bill #${id}`, 'error');
 
     const pastReturns = await db.returns.where('saleId').equals(id).toArray();
-    
+
     const returnedItemsMap = {};
     pastReturns.forEach(ret => {
         ret.items.forEach(rtItem => {
@@ -580,12 +617,12 @@ async function searchSaleForReturn() {
 }
 
 function renderReturnSession() {
-    if(!currentReturnSession) return;
+    if (!currentReturnSession) return;
     document.getElementById('return-details-container').classList.remove('hidden');
     document.getElementById('return-details-container').classList.add('flex');
 
     const s = currentReturnSession.sale;
-    document.getElementById('rt-bill-no').innerText = s.id.toString().padStart(6,'0');
+    document.getElementById('rt-bill-no').innerText = s.id.toString().padStart(6, '0');
     document.getElementById('rt-date').innerText = new Date(s.timestamp).toLocaleString();
 
     document.getElementById('rt-items').innerHTML = currentReturnSession.items.map((i, index) => {
@@ -613,20 +650,20 @@ function updateReturnQty(index, val) {
     let num = parseInt(val) || 0;
     const item = currentReturnSession.items[index];
     const available = item.qty - item.returnedQty;
-    
-    if(num < 0) num = 0;
-    if(num > available) num = available;
-    
+
+    if (num < 0) num = 0;
+    if (num > available) num = available;
+
     item.pendingReturnQty = num;
     calculateReturnTotal();
 }
 
 function calculateReturnTotal() {
-    if(!currentReturnSession) return;
+    if (!currentReturnSession) return;
     let total = 0;
     let hasItems = false;
     currentReturnSession.items.forEach(i => {
-        if(i.pendingReturnQty > 0) {
+        if (i.pendingReturnQty > 0) {
             total += (i.price * i.pendingReturnQty);
             hasItems = true;
         }
@@ -644,10 +681,10 @@ function cancelReturn() {
 }
 
 async function processReturn() {
-    if(!currentReturnSession) return;
-    
+    if (!currentReturnSession) return;
+
     const itemsToReturn = currentReturnSession.items.filter(i => i.pendingReturnQty > 0);
-    if(itemsToReturn.length === 0) return;
+    if (itemsToReturn.length === 0) return;
 
     document.getElementById('btn-process-return').disabled = true;
 
@@ -659,15 +696,15 @@ async function processReturn() {
         let costPrice = 0;
         try {
             const prod = await db.products.get(i.id);
-            if(prod) {
+            if (prod) {
                 costPrice = prod.costPrice;
                 await db.products.update(i.id, { stock: prod.stock + i.pendingReturnQty });
             }
-        } catch(e) { console.warn(e); }
-        
+        } catch (e) { console.warn(e); }
+
         refundAmount += (i.price * i.pendingReturnQty);
         refundProfit += ((i.price - costPrice) * i.pendingReturnQty);
-        
+
         returnItemsData.push({
             id: i.id,
             name: i.name,
@@ -685,12 +722,12 @@ async function processReturn() {
             refundAmount: refundAmount,
             refundProfit: refundProfit
         });
-        
+
         showToast(`Refund processed: Rs ${refundAmount.toFixed(2)}`, 'success');
         cancelReturn();
         renderInventory();
-        if(currentTab === 'dashboard') renderDashboard();
-    } catch(err) {
+        if (currentTab === 'dashboard') renderDashboard();
+    } catch (err) {
         console.error(err);
         showToast('Failed to save return', 'error');
         document.getElementById('btn-process-return').disabled = false;
@@ -699,19 +736,19 @@ async function processReturn() {
 
 // UTILS
 function getExpiryClass(dateStr) {
-    if(!dateStr) return 'text-slate-500';
+    if (!dateStr) return 'text-slate-500';
     const d = new Date(dateStr).getTime();
-    const now = new Date().setHours(0,0,0,0);
+    const now = new Date().setHours(0, 0, 0, 0);
     const days = Math.ceil((d - now) / (1000 * 3600 * 24));
-    if(days <= 0) return 'text-red-600 font-bold'; // Expired
-    if(days <= 30) return 'text-amber-600 font-bold'; // Nearing
+    if (days <= 0) return 'text-red-600 font-bold'; // Expired
+    if (days <= 30) return 'text-amber-600 font-bold'; // Nearing
     return 'text-emerald-600';
 }
 
-function showToast(msg, type='success') {
+function showToast(msg, type = 'success') {
     const t = document.getElementById('toast');
     t.innerText = msg;
-    t.className = `fixed bottom-5 right-5 px-4 py-2 rounded shadow-lg text-white font-bold transition-all z-50 ${type==='success'?'bg-emerald-500':'bg-red-500'} transform translate-y-0 opacity-100`;
+    t.className = `fixed bottom-5 right-5 px-4 py-2 rounded shadow-lg text-white font-bold transition-all z-50 ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'} transform translate-y-0 opacity-100`;
     setTimeout(() => {
         t.classList.add('translate-y-20', 'opacity-0');
     }, 3000);
